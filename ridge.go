@@ -126,12 +126,13 @@ func Run(address, prefix string, mux http.Handler) {
 func RunWithContext(ctx context.Context, address, prefix string, mux http.Handler) {
 	if strings.HasPrefix(os.Getenv("AWS_EXECUTION_ENV"), "AWS_Lambda") || os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" {
 		// go1.x or custom runtime(provided, provided.al2)
-		handler := func(event json.RawMessage) (interface{}, error) {
+		handler := func(invokedCtx context.Context, event json.RawMessage) (interface{}, error) {
 			r, err := NewRequest(event)
 			if err != nil {
 				log.Println(err)
 				return nil, err
 			}
+			r = r.WithContext(invokedCtx)
 			w := NewResponseWriter()
 			mux.ServeHTTP(w, r)
 			return w.Response(), nil
