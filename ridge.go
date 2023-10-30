@@ -140,16 +140,14 @@ func isTextMime(kind string) bool {
 }
 
 func NewLambdaHandler(mux http.Handler) func(json.RawMessage) (interface{}, error) {
+	var toRespFunc func(*ResponseWriter) (interface{}, error)
 	if invokeMode := os.Getenv("RIDGE_INVOKE_MODE"); strings.EqualFold(invokeMode, "streaming") {
-		return func(event json.RawMessage) (interface{}, error) {
-			r, err := NewRequest(event)
-			if err != nil {
-				log.Println(err)
-				return nil, err
-			}
-			w := NewResponseWriter()
-			mux.ServeHTTP(w, r)
+		toRespFunc = func(w *ResponseWriter) (interface{}, error) {
 			return w.StreamingResponse(), nil
+		}
+	} else {
+		toRespFunc = func(w *ResponseWriter) (interface{}, error) {
+			return w.Response(), nil
 		}
 	}
 	return func(event json.RawMessage) (interface{}, error) {
@@ -160,8 +158,9 @@ func NewLambdaHandler(mux http.Handler) func(json.RawMessage) (interface{}, erro
 		}
 		w := NewResponseWriter()
 		mux.ServeHTTP(w, r)
-		return w.Response(), nil
+		return toRespFunc(w)
 	}
+
 }
 
 // Run runs http handler on AWS Lambda runtime or net/http's server.
