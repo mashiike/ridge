@@ -173,8 +173,7 @@ func Run(address, prefix string, mux http.Handler) {
 func RunWithContext(ctx context.Context, address, prefix string, mux http.Handler) {
 	if strings.HasPrefix(os.Getenv("AWS_EXECUTION_ENV"), "AWS_Lambda") || os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" {
 		// go1.x or custom runtime(provided, provided.al2)
-		handler := NewLambdaHandler(mux)
-		lambda.StartWithContext(ctx, handler)
+		lambda.StartWithOptions(NewLambdaHandler(mux), lambda.WithContext(ctx))
 	} else {
 		m := http.NewServeMux()
 		switch {
