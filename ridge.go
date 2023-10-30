@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	proxyproto "github.com/pires/go-proxyproto"
 )
@@ -87,6 +88,27 @@ func (w *ResponseWriter) Response() Response {
 	}
 }
 
+func (w *ResponseWriter) StreamingResponse() *events.LambdaFunctionURLStreamingResponse {
+	resp := &events.LambdaFunctionURLStreamingResponse{
+		StatusCode: w.statusCode,
+		Body:       bytes.NewReader(w.Bytes()),
+	}
+	if t := w.header.Get("Content-Type"); t == "" {
+		w.header.Set("Content-Type", DefaultContentType)
+	}
+	if len(w.header) > 0 {
+		resp.Headers = make(map[string]string, len(w.header))
+		for key, value := range w.header {
+			if key == "Set-Cookie" {
+				resp.Cookies = value
+			} else {
+				resp.Headers[key] = strings.Join(value, ",")
+			}
+		}
+	}
+	return resp
+}
+
 func isBinary(k, v string) bool {
 	if k == "Content-Type" && !isTextMime(v) {
 		return true
@@ -118,6 +140,18 @@ func isTextMime(kind string) bool {
 }
 
 func NewLambdaHandler(mux http.Handler) func(json.RawMessage) (interface{}, error) {
+	if invokeMode := os.Getenv("RIDGE_INVOKE_MODE"); strings.EqualFold(invokeMode, "streaming") {
+		return func(event json.RawMessage) (interface{}, error) {
+			r, err := NewRequest(event)
+			if err != nil {
+				log.Println(err)
+				return nil, err
+			}
+			w := NewResponseWriter()
+			mux.ServeHTTP(w, r)
+			return w.StreamingResponse(), nil
+		}
+	}
 	return func(event json.RawMessage) (interface{}, error) {
 		r, err := NewRequest(event)
 		if err != nil {
