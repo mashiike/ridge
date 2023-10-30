@@ -117,6 +117,19 @@ func isTextMime(kind string) bool {
 	return isText
 }
 
+func NewLambdaHandler(mux http.Handler) func(json.RawMessage) (interface{}, error) {
+	return func(event json.RawMessage) (interface{}, error) {
+		r, err := NewRequest(event)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		w := NewResponseWriter()
+		mux.ServeHTTP(w, r)
+		return w.Response(), nil
+	}
+}
+
 // Run runs http handler on AWS Lambda runtime or net/http's server.
 func Run(address, prefix string, mux http.Handler) {
 	RunWithContext(context.Background(), address, prefix, mux)
@@ -126,16 +139,7 @@ func Run(address, prefix string, mux http.Handler) {
 func RunWithContext(ctx context.Context, address, prefix string, mux http.Handler) {
 	if strings.HasPrefix(os.Getenv("AWS_EXECUTION_ENV"), "AWS_Lambda") || os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" {
 		// go1.x or custom runtime(provided, provided.al2)
-		handler := func(event json.RawMessage) (interface{}, error) {
-			r, err := NewRequest(event)
-			if err != nil {
-				log.Println(err)
-				return nil, err
-			}
-			w := NewResponseWriter()
-			mux.ServeHTTP(w, r)
-			return w.Response(), nil
-		}
+		handler := NewLambdaHandler(mux)
 		lambda.StartWithContext(ctx, handler)
 	} else {
 		m := http.NewServeMux()
